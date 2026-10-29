@@ -184,3 +184,19 @@ def test_phase_off_axis_with_no_gap_before_the_stop():
         _x, _y, without = _wavefront(_gapless_stop_system(0.0), field)
         assert np.ptp(with_gap) < 5.0, np.ptp(with_gap)        # the bug gave hundreds of waves
         assert np.ptp(without) == pytest.approx(np.ptp(with_gap), rel=1e-3, abs=1e-4)
+
+
+def test_the_exit_pupil_searches_find_the_least_rms_too():
+    from KrakenOS.LibRMS import BestFocus
+    from KrakenOS.PhaseCalc import BestExitPupilPos as phase_exit_pupil
+    from KrakenOS.SphericalPSFCalc import BestExitPupilPos as psf_exit_pupil
+
+    rng = np.random.default_rng(1119)
+    u, v = rng.uniform(-0.05, 0.05, 400), rng.uniform(-0.05, 0.05, 400)
+    N = 1.0 / np.sqrt(1.0 + u * u + v * v)
+    L, M = u * N, v * N
+    X, Y, Z = 5.0 * u, 15.0 * v, np.zeros(400)
+    best = BestFocus(X, Y, Z, L, M, N)
+    assert best == pytest.approx(_scan(L, M, N, X, Y, -10.0), abs=2e-3)
+    assert phase_exit_pupil(X, Y, Z, L, M, N) == pytest.approx(best)
+    assert psf_exit_pupil(X, Y, Z, L, M, N) == pytest.approx(best)

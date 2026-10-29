@@ -7,6 +7,9 @@
 - PupilCalc finds a stop with no gap before it (an object at infinity with the stop as the first
   surface): its Newton step was 0/0 at r = 0 and it raised IndexError. The rays it then launches
   leave along the field instead of 0/0. A telecentric object space says why it has no pupil.
+- Phase's off-axis wavefront with such a stop is the one the same lens gives with a gap before the
+  stop (an object at infinity: the gap changes nothing). Phase's input plane, tilted through the
+  chief ray's start, crossed the stop, and half the pupil's paths were counted the wrong way.
 """
 
 import contextlib
@@ -107,12 +110,12 @@ def test_raystop_has_the_launch_direction_it_traces_with():
     assert np.all(np.isfinite(landed))
 
 
-def _gapless_stop_system():
+def _gapless_stop_system(gap=0.0):
     """An object at infinity, the stop right after it, then a 50 mm lens (the F-theta layout's case)."""
     import KrakenOS as Kos
 
     return _system([
-        _surf(Kos, Thickness=0.0, Diameter=10.0),
+        _surf(Kos, Thickness=gap, Diameter=10.0),
         _surf(Kos, Thickness=5.0, Diameter=2.0),
         _surf(Kos, Rc=51.5, Thickness=4.0, Glass="BK7", Diameter=20.0),
         _surf(Kos, Rc=-51.5, Thickness=48.4, Diameter=20.0),
@@ -163,3 +166,21 @@ def test_a_telecentric_object_space_has_no_pupil_to_find():
     ])
     with pytest.raises(ValueError, match="infinity"):
         _pupil(system, 2)
+
+
+def _wavefront(system, field):
+    import KrakenOS as Kos
+
+    pupil = _pupil(system, 1)
+    pupil.Samp, pupil.Ptype, pupil.FieldType, pupil.FieldX, pupil.FieldY = 10, "hexapolar", "angle", 0.0, field
+    with contextlib.redirect_stdout(io.StringIO()):
+        y, x, w, _p2v = Kos.Phase(pupil)
+    return np.asarray(x), np.asarray(y), np.asarray(w)
+
+
+def test_phase_off_axis_with_no_gap_before_the_stop():
+    for field in (5.0, 10.0):
+        _x, _y, with_gap = _wavefront(_gapless_stop_system(10.0), field)
+        _x, _y, without = _wavefront(_gapless_stop_system(0.0), field)
+        assert np.ptp(with_gap) < 5.0, np.ptp(with_gap)        # the bug gave hundreds of waves
+        assert np.ptp(without) == pytest.approx(np.ptp(with_gap), rel=1e-3, abs=1e-4)
